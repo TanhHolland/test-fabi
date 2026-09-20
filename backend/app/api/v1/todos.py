@@ -99,6 +99,13 @@ async def get_todo(
             detail="Todo not found",
         )
 
+    # Verify ownership
+    if todo.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied",
+        )
+
     return todo
 
 
@@ -118,18 +125,24 @@ async def update_existing_todo(
             detail="Todo not found",
         )
 
-    update_data = todo_data.model_dump()
+    # Verify ownership
+    if todo.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied",
+        )
 
-    if todo_data.completed:
-        todo.completed = todo_data.completed
-
-    # Apply other updates
-    if update_data.get("title") is not None:
-        todo.title = update_data["title"]
-    if "description" in update_data:
-        todo.description = update_data["description"]
+    # Only update fields that were explicitly provided
+    update_data = todo_data.model_dump(exclude_unset=True)
+    
+    for key, value in update_data.items():
+        setattr(todo, key, value)
 
     updated_todo = await update_todo(db, todo, {})
+
+    # Invalidate user's todo list cache
+    cache_key = f"todos:list:{current_user.id}"
+    await redis.delete(cache_key)
 
     return updated_todo
 
@@ -149,6 +162,17 @@ async def delete_existing_todo(
             detail="Todo not found",
         )
 
+    # Verify ownership
+    if todo.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied",
+        )
+
     await delete_todo(db, todo)
+
+    # Invalidate user's todo list cache
+    cache_key = f"todos:list:{current_user.id}"
+    await redis.delete(cache_key)
 
     return None
