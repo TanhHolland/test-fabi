@@ -9,11 +9,24 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fabbi -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   redis:
     image: redis:7
+    command: redis-server --requirepass redis_secret
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 
   backend:
     build:
@@ -23,14 +36,16 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://fabbi:fabbi_secret@postgres:5432/postgres
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:redis_secret@redis:6379/0
       JWT_SECRET: super-secret-key-change-in-production
       JWT_ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: 30
       REFRESH_TOKEN_EXPIRE_DAYS: 7
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   frontend:
     build:
