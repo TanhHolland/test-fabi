@@ -26,6 +26,13 @@ async def get_current_user(
             detail="Invalid authentication token",
         )
 
+    # Validate token type - only accept access tokens
+    if payload.get("type") != "access":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token type",
+        )
+
     user_id = payload.get("sub")
     if user_id is None:
         raise HTTPException(
